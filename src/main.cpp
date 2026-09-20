@@ -16,13 +16,15 @@ int main(void)
 	int width, height, channels;
 	char ch;
 
+	clock_t start, end;
+
 	// buffer for red histogram
 
 	int redHistogram[256] = { 0 };
 	int greenHistogram[256] = { 0 };
 	int blueHistogram[256] = { 0 };
 
-	imageData = stbi_load("../resources/mars_4k.jpg", &width, &height, &channels, 3);
+	imageData = stbi_load("../resources/mars_8k.jpg", &width, &height, &channels, 3);
 
 	if (!imageData)
 	{
@@ -38,6 +40,8 @@ int main(void)
 
 	int totalPixelsInImage = width * height;
 	int totalImageArraySize = totalPixelsInImage * 3;
+
+	start = clock();
 
 	for (int i = 0; i < totalImageArraySize; i = i + 3)
 	{
@@ -55,6 +59,13 @@ int main(void)
 		blueHistogram[B]++;
 
 	}
+
+	end = clock();
+
+	double TotalCPUTime = ((double)(end - start)) / CLOCKS_PER_SEC;
+
+	cout << "Total time taken by the CPU to calculate R, G, B histograms is " << TotalCPUTime << endl;
+
 
 	bool isredHistogramCorrect = isHistogramCorrect(totalPixelsInImage, redHistogram, 256);
 
