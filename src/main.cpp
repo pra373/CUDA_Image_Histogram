@@ -14,29 +14,36 @@ int main(void)
 {
 	unsigned char* imageData;
 	int width, height, channels;
-	char ch;
 
 	clock_t start, end;
+	FILE* logFile;
 
-	// buffer for red histogram
-
+	// buffers for histograms
 	int redHistogram[256] = { 0 };
 	int greenHistogram[256] = { 0 };
 	int blueHistogram[256] = { 0 };
+
+	logFile = fopen("../logs/log.txt", "w");
+	
+	if (!logFile)
+	{
+		cout << "failed to open log file to write application logs !" << endl;
+		getchar();
+		return(EXIT_FAILURE);
+	}
 
 	imageData = stbi_load("../resources/mars_8k.jpg", &width, &height, &channels, 3);
 
 	if (!imageData)
 	{
-		cout << "Failed to load image!" << endl;
-		cout << "Reason: " << stbi_failure_reason() << endl;
-		cin >> ch;
+		fprintf(logFile, "Failed to load image!\n");
+		fprintf(logFile, "Reason: %s\n", stbi_failure_reason());
 		exit(EXIT_FAILURE);
 	}
 
-	cout << "Width : " << width << endl;
-	cout << "Height : " << height << endl;
-	cout << "Channels : " << channels << endl;
+	fprintf(logFile, "Width of image: %d\n", width);
+	fprintf(logFile, "Height of image: %d\n", height);
+	fprintf(logFile, "channels in image: %d\n", channels);
 
 	int totalPixelsInImage = width * height;
 	int totalImageArraySize = totalPixelsInImage * 3;
@@ -64,32 +71,36 @@ int main(void)
 
 	double TotalCPUTime = ((double)(end - start)) / CLOCKS_PER_SEC;
 
-	cout << "Total time taken by the CPU to calculate R, G, B histograms is " << TotalCPUTime << endl;
+	fprintf(logFile, "Total time taken by the CPU to calculate R, G, B histograms is %f secs\n", TotalCPUTime);
 
 
 	bool isredHistogramCorrect = isHistogramCorrect(totalPixelsInImage, redHistogram, 256);
 
 	if (!isredHistogramCorrect)
 	{
-		cout << "Error in calculating red histogram !" << endl;
+		fprintf(logFile, "Error calculating red histogram\n");
 	}
 
 	bool isGreenHistogramCorrect = isHistogramCorrect(totalPixelsInImage, greenHistogram, 256);
 
 	if (!isGreenHistogramCorrect)
 	{
-		cout << "Error in calculating green histogram !" << endl;
+		fprintf(logFile, "Error calculating green histogram\n");
 	}
 
 	bool isBlueHistogramCorrect = isHistogramCorrect(totalPixelsInImage, blueHistogram, 256);
 
 	if (!isBlueHistogramCorrect)
 	{
-		cout << "Error in calculating blue histogram !" << endl;
+		fprintf(logFile, "Error calculating blue histogram\n");
 	}
 
-	cin >> ch;
 	stbi_image_free(imageData);
+	fclose(logFile);
+
+	cout << "Press any key to close the application !" << endl;
+	getchar();
+	
 	return(0);
 }
 
