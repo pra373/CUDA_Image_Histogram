@@ -2,28 +2,46 @@
 
 __global__ void kernel(unsigned char* imageData, int* redHistogram, int* greenHistogram, int* blueHistogram, int width, int height)
 {
+	__shared__ unsigned int SredHistogram[256];
+	__shared__ unsigned int SgreenHistogram[256];
+	__shared__ unsigned int SblueHistogram[256];
+
+	int histogramIndex = threadIdx.x + blockDim.x * threadIdx.y;
+
+	if (histogramIndex < 256)
+	{
+		SredHistogram[histogramIndex] = 0;
+		SblueHistogram[histogramIndex] = 0;
+		SgreenHistogram[histogramIndex] = 0;
+	}
+
+	__syncthreads();
+
 	int x = threadIdx.x + blockIdx.x * blockDim.x;
 	int y = threadIdx.y + blockIdx.y * blockDim.y;
 	int offset = x + y * width;
 
-	if (x >= width || y >= height)
+	if (x < width && y < height)
 	{
-		return;
+		int imageIndex = offset * 3;
+
+		int R = imageData[imageIndex];
+		int G = imageData[imageIndex + 1];
+		int B = imageData[imageIndex + 2];
+
+		atomicAdd(&SredHistogram[R], 1);
+		atomicAdd(&SgreenHistogram[G], 1);
+		atomicAdd(&SblueHistogram[B], 1);
+
 	}
+	__syncthreads();
 
-	int imageIndex = offset * 3;
-
-	int R = imageData[imageIndex];
-	int G = imageData[imageIndex + 1];
-	int B = imageData[imageIndex + 2];
-
-	/*redHistogram[R]++;
-	greenHistogram[G]++;
-	blueHistogram[B]++;*/
-
-	atomicAdd(&redHistogram[R], 1);
-	atomicAdd(&greenHistogram[G], 1);
-	atomicAdd(&blueHistogram[B], 1);
+	if (histogramIndex < 256)
+	{
+		atomicAdd(&redHistogram[histogramIndex], SredHistogram[histogramIndex]);
+		atomicAdd(&greenHistogram[histogramIndex], SgreenHistogram[histogramIndex]);
+		atomicAdd(&blueHistogram[histogramIndex], SblueHistogram[histogramIndex]);
+	}
 
 }
 
