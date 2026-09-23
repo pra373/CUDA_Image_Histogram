@@ -1,3 +1,4 @@
+#include<windows.h>
 #include<iostream>
 #include<direct.h>
 #include<time.h>
@@ -5,6 +6,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include"../include/stb_image.h"
 #include"../include/kernel.cuh"
+#include"../include/icon.h"
 
 using std::cout;
 using std::endl;
@@ -12,47 +14,96 @@ using std::cin;
 
 bool isHistogramCorrect(int totalPixelCount, int* histogram, int sizeOfHistogram);
 void uninitialize(unsigned char* imageData, unsigned char* dev_imageData, int* dev_redHistogram, int* dev_greenHistogram, int* dev_blueHistogram, FILE* logFile);
+void Tell_If_CPU_and_GPU_Histograms_Match(int* redHistogram, int* greenHistogram, int* blueHistogram, int* afterGPU_redHistogram, int* afterGPU_greenHistogram, int* afterGPU_blueHistogram);
 
 FILE* logFile;
 
-int main(void)
+unsigned char* imageData;
+
+int* dev_redHistogram = nullptr;
+int* dev_greenHistogram = nullptr;
+int* dev_blueHistogram = nullptr;
+
+int width, height, channels;
+
+// buffers for histograms
+int redHistogram[256] = { 0 };
+int greenHistogram[256] = { 0 };
+int blueHistogram[256] = { 0 };
+
+//buffers for Histograms calculated by GPU
+
+int afterGPU_redHistogram[256] = { 0 };
+int afterGPU_greenHistogram[256] = { 0 };
+int afterGPU_blueHistogram[256] = { 0 };
+
+clock_t start, end;
+cudaEvent_t cudaStart, cudaStop;
+cudaError_t error;
+
+unsigned char* dev_imageData;
+
+size_t sizeOfHistogram = 256 * sizeof(int);
+
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+
+HWND ghwnd = NULL;
+DWORD dwStyle = 0;
+WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
+BOOL gbFullScreen = FALSE;
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
 {
-	unsigned char* imageData;
-	int width, height, channels;
-
-	// buffers for histograms
-	int redHistogram[256] = { 0 };
-	int greenHistogram[256] = { 0 };
-	int blueHistogram[256] = { 0 };
-
-	//buffers for Histograms calculated by GPU
-
-	int afterGPU_redHistogram[256] = { 0 };
-	int afterGPU_greenHistogram[256] = { 0 };
-	int afterGPU_blueHistogram[256] = { 0 };
-
-	clock_t start, end;
-	cudaEvent_t cudaStart, cudaStop;
-
-	cudaError_t error;
-	unsigned char* dev_imageData;
-
-	int* dev_redHistogram = nullptr;
-	int* dev_greenHistogram = nullptr;
-	int* dev_blueHistogram = nullptr;
-	
-	size_t sizeOfHistogram = 256 * sizeof(int);
-
-	
+	WNDCLASSEX wndclass;
+	HWND hwnd;
+	MSG msg;
+	TCHAR szAppName[] = TEXT("PLP Window");
 
 	logFile = fopen("../logs/log.txt", "w");
-	
+
 	if (!logFile)
 	{
 		cout << "failed to open log file to write application logs !" << endl;
 		getchar();
 		return(EXIT_FAILURE);
 	}
+	
+	// WNDCLASSEX Initialization
+
+	wndclass.cbSize = sizeof(WNDCLASSEX);
+	wndclass.style = CS_HREDRAW | CS_VREDRAW;
+	wndclass.lpfnWndProc = WndProc;
+	wndclass.cbWndExtra = 0;
+	wndclass.cbClsExtra = 0;
+	wndclass.hInstance = hInstance;
+	wndclass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+	wndclass.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(MYICON));
+	wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wndclass.lpszClassName = szAppName;
+	wndclass.lpszMenuName = NULL;
+	wndclass.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(MYICON));
+
+	RegisterClassEx(&wndclass);
+
+	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
+		szAppName,
+		TEXT("Prathamesh Laxmikant Paropkari"),
+		WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		NULL,
+		NULL,
+		hInstance,
+		NULL
+	);
+
+	ghwnd = hwnd;
+
+	ShowWindow(hwnd, iCmdShow);
+
+	UpdateWindow(hwnd);
 
 	imageData = stbi_load("../resources/mars_8k.jpg", &width, &height, &channels, 3);
 
@@ -94,7 +145,6 @@ int main(void)
 	double TotalCPUTime = ((double)(end - start)) / CLOCKS_PER_SEC;
 
 	fprintf(logFile, "Total time taken by the CPU to calculate R, G, B histograms is %f secs\n", TotalCPUTime);
-
 
 	bool isredHistogramCorrect = isHistogramCorrect(totalPixelsInImage, redHistogram, 256);
 
@@ -242,6 +292,139 @@ int main(void)
 		exit(EXIT_FAILURE);
 	}
 
+	
+	Tell_If_CPU_and_GPU_Histograms_Match(redHistogram, greenHistogram, blueHistogram, afterGPU_redHistogram, afterGPU_greenHistogram, afterGPU_blueHistogram);
+	
+	// message loop
+
+	while (GetMessage(&msg, NULL, 0, 0))   // heart of application
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+
+	return((int)msg.wParam);
+
+}
+
+// call back function
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
+{
+	// function declaration
+	void ToggleFullScreen(void);
+	
+	// code
+
+	switch (iMsg)
+	{
+	case WM_DESTROY:
+		uninitialize(imageData, dev_imageData, dev_redHistogram, dev_greenHistogram, dev_blueHistogram, logFile);
+		PostQuitMessage(0);
+		break;
+	case WM_KEYDOWN:
+		switch (LOWORD(wParam))
+		{
+		case VK_ESCAPE:
+			DestroyWindow(hwnd);
+			break;
+
+		}
+		break;
+	case WM_CHAR:
+		switch (LOWORD(wParam))
+		{
+		case 'F':
+		case 'f':
+			if (gbFullScreen == FALSE)
+			{
+				ToggleFullScreen();
+				gbFullScreen = TRUE;
+			}
+			else
+			{
+				ToggleFullScreen();
+				gbFullScreen = FALSE;
+			}
+
+			break;
+		}
+
+		break;
+
+	default:
+		break;
+
+		
+		
+	}
+
+	return(DefWindowProc(hwnd, iMsg, wParam,lParam));
+	
+
+	
+}
+
+void ToggleFullScreen(void)
+{
+	// Local variable declarations 
+	MONITORINFO mi = { sizeof(MONITORINFO) };
+
+
+	//code
+
+	if (gbFullScreen == FALSE)
+	{
+		dwStyle = GetWindowLong(ghwnd, GWL_STYLE);
+
+		if (dwStyle & WS_OVERLAPPEDWINDOW)
+		{
+			if (GetWindowPlacement(ghwnd, &wpPrev) && GetMonitorInfo(MonitorFromWindow(ghwnd, MONITORINFOF_PRIMARY), &mi))
+			{
+				SetWindowLong(ghwnd, GWL_STYLE, dwStyle & ~WS_OVERLAPPEDWINDOW);
+				SetWindowPos(ghwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOZORDER | SWP_FRAMECHANGED);
+			}
+		}
+
+		ShowCursor(FALSE);
+	}
+
+	else
+	{
+		SetWindowPlacement(ghwnd, &wpPrev);
+		SetWindowLong(ghwnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);
+		SetWindowPos(ghwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_FRAMECHANGED);
+		ShowCursor(TRUE);
+		
+	}
+
+}
+
+bool isHistogramCorrect(int totalPixelCount, int* histogram, int sizeOfHistogram)
+{
+	unsigned int count = 0;
+
+	for (int i = 0; i < sizeOfHistogram; i++)
+	{
+		count = count + histogram[i];
+	}
+
+	return(count == totalPixelCount);
+}
+
+void uninitialize(unsigned char* imageData, unsigned char* dev_imageData, int* dev_redHistogram, int* dev_greenHistogram, int* dev_blueHistogram, FILE* logFile)
+{
+
+	cudaFree(dev_blueHistogram);
+	cudaFree(dev_greenHistogram);
+	cudaFree(dev_redHistogram);
+	cudaFree(dev_imageData);
+	stbi_image_free(imageData);
+	fclose(logFile);
+}
+
+void Tell_If_CPU_and_GPU_Histograms_Match(int* redHistogram, int* greenHistogram, int* blueHistogram, int* afterGPU_redHistogram, int* afterGPU_greenHistogram, int* afterGPU_blueHistogram)
+{
 	// check weather GPU histogram matches CPU histogram
 
 	bool histogramsMatch = true;
@@ -271,35 +454,10 @@ int main(void)
 	{
 		fprintf(logFile, "CPU and GPU histograms match successfully!\n");
 	}
-
-
-	uninitialize(imageData, dev_imageData, dev_redHistogram, dev_greenHistogram, dev_blueHistogram, logFile);
-
-	cout << "Press any key to close the application !" << endl;
-	getchar();
-	
-	return(0);
 }
 
-bool isHistogramCorrect(int totalPixelCount, int* histogram, int sizeOfHistogram)
-{
-	unsigned int count = 0;
 
-	for (int i = 0; i < sizeOfHistogram; i++)
-	{
-		count = count + histogram[i];
-	}
 
-	return(count == totalPixelCount);
-}
 
-void uninitialize(unsigned char* imageData, unsigned char* dev_imageData, int* dev_redHistogram, int* dev_greenHistogram, int* dev_blueHistogram, FILE* logFile)
-{
 
-	cudaFree(dev_blueHistogram);
-	cudaFree(dev_greenHistogram);
-	cudaFree(dev_redHistogram);
-	cudaFree(dev_imageData);
-	stbi_image_free(imageData);
-	fclose(logFile);
-}
+
