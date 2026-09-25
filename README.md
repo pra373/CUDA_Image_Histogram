@@ -49,6 +49,15 @@ CPU and GPU histograms match successfully!
 
 The histogram contains **256 intensity bins (0–255)** for each RGB channel.
 
+The histogram reflects the visual characteristics of the Mars texture image:
+
+* **Blue:** Concentrated at lower intensities, showing a lower blue contribution across the brighter surface regions.
+* **Green:** Mostly distributed across the mid-range intensities.
+* **Red:** Extends strongly into higher intensities, reflecting the reddish appearance of the Mars surface.
+
+
+[View the Mars texture image](resources/mars_8k.jpg)
+
 [View histogram CSV](output/histograms.csv)
 
 ## Technologies
