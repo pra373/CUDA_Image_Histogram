@@ -71,3 +71,8 @@ The histogram reflects the visual characteristics of the Mars texture image:
 ## Learning
 
 This project is part of my exploration of CUDA concepts from **CUDA by Example**, with a focus on **parallel execution, atomic operations, GPU memory, and performance measurement**.
+
+## Note
+
+The project includes a **Win32 window** even though it is not currently used for histogram visualization. This is intentional, as I plan to use this native window in the future to visualize the RGB histograms directly within my own application.
+
